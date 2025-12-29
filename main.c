@@ -11,6 +11,8 @@ Date: Dec 29, 2025
 #include <string.h>
 #include <stdint.h>
 #include <ctype.h>
+#include <termios.h>
+#include <unistd.h>
 
 // Constants
 #define LEN_NAME            30              // Name length
@@ -22,6 +24,10 @@ Date: Dec 29, 2025
 #define LEN_INPUT_BUFFER    10              // Input buffer for menu choices
 #define LEN_LOG_MSG         50              // Small log message buffer
 
+#define KEY_UP              65
+#define KEY_DOWN            66
+#define KEY_ENTER           10
+
 // Enumerators
 typedef enum {
     LOG_DEBUG = 0,
@@ -31,11 +37,11 @@ typedef enum {
 } LogLevel;
 
 typedef enum {
-    MENU_DISPLAY_ALL = 1,
-    MENU_ADD = 2,
-    MENU_VIEW = 3,
-    MENU_UPDATE = 4,
-    MENU_DELETE = 5,
+    MENU_DISPLAY_ALL = 0,
+    MENU_ADD = 1,
+    MENU_VIEW = 2,
+    MENU_UPDATE = 3,
+    MENU_DELETE = 4,
 } MenuChoice;
 
 // Set minimum log level to display (logs below this level will be filtered out)
@@ -52,6 +58,7 @@ typedef struct Receipt {
 
 
 // Function prototypes
+void clear_terminal(void);
 void custom_log(LogLevel level, const char *message);
 void trim_newline(char *str);
 void free_list(Receipt *head);
@@ -61,6 +68,9 @@ const char* log_level_to_string(LogLevel level);
 uint16_t get_new_id(Receipt *head);
 uint8_t parse_receipt_id(const char *input, uint16_t *receipt_id);
 int8_t case_insensitive_compare(const char *s1, const char *s2);
+// Terminal control
+void enable_raw_mode(struct termios *orig_termios);
+void disable_raw_mode(struct termios *orig_termios);
 // Core logic
 Receipt *load_receipts(void);
 Receipt *run_menu(Receipt *head);
@@ -84,7 +94,6 @@ uint8_t rewrite_receipts_to_file(Receipt *head);
 int main(){
     // Setup
     Receipt *head = load_receipts();
-    printf("===== Diego's Cookbook =====\n");
 
     // Worker
     head = run_menu(head);
@@ -96,10 +105,59 @@ int main(){
 
 
 /**
+ * @brief Clears the terminal screen
+ *
+ * Uses platform-specific commands to clear the terminal display.
+ * On Windows systems, uses "cls"; on Unix-like systems, uses "clear".
+ */
+void clear_terminal(){
+    // Use a preprocessor directive for cross-platform compatibility with system()
+    #ifdef _WIN32
+        system("cls");
+    #else
+        system("clear");
+    #endif
+}
+
+/**
+ * @brief Enables raw mode for terminal input
+ *
+ * Disables canonical mode and echo to allow reading single keypresses
+ * without waiting for Enter. Saves original terminal settings.
+ *
+ * @param orig_termios Pointer to store original terminal settings (struct termios*)
+ */
+void enable_raw_mode(struct termios *orig_termios){
+    struct termios raw;
+
+    tcgetattr(STDIN_FILENO, orig_termios);
+    raw = *orig_termios;
+
+    // Disable canonical mode and echo
+    raw.c_lflag &= ~(ICANON | ECHO);
+    raw.c_cc[VMIN] = 1;   // Read at least 1 character
+    raw.c_cc[VTIME] = 0;  // No timeout
+
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+}
+
+/**
+ * @brief Restores terminal to original mode
+ *
+ * Restores the terminal settings that were saved before entering raw mode.
+ *
+ * @param orig_termios Pointer to original terminal settings (struct termios*)
+ */
+void disable_raw_mode(struct termios *orig_termios){
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, orig_termios);
+}
+
+/**
  * @brief Runs the interactive menu loop for the cookbook application
  *
  * Displays a menu with options to display, add, view, update, or delete receipts.
- * Continues looping until the user chooses to exit (Q/q).
+ * Supports arrow key navigation (UP/DOWN) and Enter to select.
+ * Press 'Q' or 'q' at any time to exit.
  *
  * @param head Pointer to the head of the receipt linked list
  * @return Receipt* Updated head pointer of the receipt list
@@ -107,114 +165,178 @@ int main(){
 Receipt *run_menu(Receipt *head){
     char input[LEN_INPUT_BUFFER];
     uint8_t choice = 0;
+    uint8_t selected_option = 0;  // 0-4 for menu items, 5 for exit
+    struct termios orig_termios;
+
+    clear_terminal();
+    enable_raw_mode(&orig_termios);
 
     while(1){
+        // Display menu with current selection highlighted
+        clear_terminal();
+        printf("\n===== Diego's Cookbook =====\n");
         printf("\n--- MENU ---\n");
-        printf("1. Display all\n");
-        printf("2. Add receipt\n");
-        printf("3. View receipt\n");
-        printf("4. Update receipt\n");
-        printf("5. Delete receipt\n");
-        printf("Q. Exit\n");
-        printf("Choice: ");
+        printf("%s1. Display all\n", (selected_option == 0) ? "> " : "  ");
+        printf("%s2. Add receipt\n", (selected_option == 1) ? "> " : "  ");
+        printf("%s3. View receipt\n", (selected_option == 2) ? "> " : "  ");
+        printf("%s4. Update receipt\n", (selected_option == 3) ? "> " : "  ");
+        printf("%s5. Delete receipt\n", (selected_option == 4) ? "> " : "  ");
+        printf("%sQ. Exit\n", (selected_option == 5) ? "> " : "  ");
+        printf("\nUse UP/DOWN arrows to navigate, ENTER to select, Q to quit\n");
 
-        if(!fgets(input, sizeof(input), stdin)) break;
-        trim_newline(input);
-        printf("\n");
+        // Read key input
+        char c = getchar();
 
-        if(input[0] == 'q' || input[0] == 'Q') break;
-        
-        choice = atoi(input);
-
-        if(choice == MENU_DISPLAY_ALL){
-            custom_log(LOG_INFO, "Displaying all receipts...\n");
-            display_receipts(head);
+        // Handle 'Q' or 'q' for quit
+        if(c == 'q' || c == 'Q'){
+            break;
         }
-        else if(choice == MENU_ADD){
-            custom_log(LOG_INFO, "Adding a new receipt...\n\n");
-            char name[LEN_NAME], receipt[LEN_REC];
 
-            printf("Name: ");
-            fgets(name, sizeof(name), stdin);
-            trim_newline(name);
+        // Handle escape sequences (arrow keys)
+        if(c == 27){  // ESC
+            char seq[2];
+            seq[0] = getchar();
+            seq[1] = getchar();
 
-            printf("Receipt: ");
-            fgets(receipt, sizeof(receipt), stdin);
-            trim_newline(receipt);
-
-            if(name[0] != '\0'){
-                head = create_receipt(head, name, receipt);
-                custom_log(LOG_INFO, "New receipt saved!\n");
+            if(seq[0] == '['){
+                if(seq[1] == KEY_UP){  // Up arrow
+                    if(selected_option > 0){
+                        selected_option--;
+                    }
+                }
+                else if(seq[1] == KEY_DOWN){  // Down arrow
+                    if(selected_option < 5){
+                        selected_option++;
+                    }
+                }
             }
+            continue;
         }
-        else if(choice == MENU_VIEW){
-            // View receipt
-            uint16_t receipt_id = 0;
 
-            display_receipts(head);
-
-            printf("ID of the receipt (int): ");
-            if(fgets(input, sizeof(input), stdin) == NULL){
-                continue; // handle EOF or read error
-            }
-            if(!parse_receipt_id(input, &receipt_id)){
-                continue;
+        // Handle Enter key
+        if(c == KEY_ENTER || c == '\r'){
+            // Exit if "Exit" is selected
+            if(selected_option == 5){
+                break;
             }
 
-            view_receipt(head, receipt_id);
-        }
-        else if(choice == MENU_UPDATE){
-            custom_log(LOG_INFO, "Update receipt...\n");
-            char name[LEN_NAME], receipt[LEN_REC];
-            uint16_t receipt_id = 0;
+            // Switch back to normal mode for input operations
+            disable_raw_mode(&orig_termios);
+            clear_terminal();
 
-            display_receipts(head);
+            choice = selected_option;
 
-            printf("ID of the receipt (int): ");
-            if(fgets(input, sizeof(input), stdin) == NULL){
-                continue; // handle EOF or read error
+            if(choice == MENU_DISPLAY_ALL){
+                custom_log(LOG_INFO, "Displaying all receipts...\n");
+                display_receipts(head);
             }
-            if(!parse_receipt_id(input, &receipt_id)){
-                continue;
+            else if(choice == MENU_ADD){
+                custom_log(LOG_INFO, "Adding a new receipt...\n\n");
+                char name[LEN_NAME], receipt[LEN_REC];
+
+                printf("Name: ");
+                fgets(name, sizeof(name), stdin);
+                trim_newline(name);
+
+                printf("Receipt: ");
+                fgets(receipt, sizeof(receipt), stdin);
+                trim_newline(receipt);
+
+                if(name[0] != '\0'){
+                    head = create_receipt(head, name, receipt);
+                    custom_log(LOG_INFO, "New receipt saved!\n");
+                }
+            }
+            else if(choice == MENU_VIEW){
+                // View receipt
+                uint16_t receipt_id = 0;
+
+                display_receipts(head);
+
+                printf("ID of the receipt (int): ");
+                if(fgets(input, sizeof(input), stdin) == NULL){
+                    printf("Press any key to continue...");
+                    getchar();
+                    enable_raw_mode(&orig_termios);
+                    continue;
+                }
+                if(!parse_receipt_id(input, &receipt_id)){
+                    printf("Press any key to continue...");
+                    getchar();
+                    enable_raw_mode(&orig_termios);
+                    continue;
+                }
+
+                view_receipt(head, receipt_id);
+            }
+            else if(choice == MENU_UPDATE){
+                custom_log(LOG_INFO, "Update receipt...\n");
+                char name[LEN_NAME], receipt[LEN_REC];
+                uint16_t receipt_id = 0;
+
+                display_receipts(head);
+
+                printf("ID of the receipt (int): ");
+                if(fgets(input, sizeof(input), stdin) == NULL){
+                    printf("Press any key to continue...");
+                    getchar();
+                    enable_raw_mode(&orig_termios);
+                    continue;
+                }
+                if(!parse_receipt_id(input, &receipt_id)){
+                    printf("Press any key to continue...");
+                    getchar();
+                    enable_raw_mode(&orig_termios);
+                    continue;
+                }
+
+                printf("Name (Press 'Enter' to keep current): ");
+                fgets(name, sizeof(name), stdin);
+                trim_newline(name);
+
+                printf("Receipt (Press 'Enter' to keep current): ");
+                fgets(receipt, sizeof(receipt), stdin);
+                trim_newline(receipt);
+
+                head = update_receipt(head, receipt_id, name, receipt);
+                char msg[LEN_LOG_MSG];
+                snprintf(msg, sizeof(msg), "Receipt '%d' is updated.\n", receipt_id);
+                custom_log(LOG_INFO, msg);
+            }
+            else if(choice == MENU_DELETE){
+                custom_log(LOG_INFO, "Delete receipt...\n");
+                uint16_t receipt_id = 0;
+
+                display_receipts(head);
+
+                printf("ID of the receipt (int): ");
+                if(fgets(input, sizeof(input), stdin) == NULL){
+                    printf("Press any key to continue...");
+                    getchar();
+                    enable_raw_mode(&orig_termios);
+                    continue;
+                }
+                if(!parse_receipt_id(input, &receipt_id)){
+                    printf("Press any key to continue...");
+                    getchar();
+                    enable_raw_mode(&orig_termios);
+                    continue;
+                }
+
+                head = delete_receipt(head, receipt_id);
+                char msg[LEN_LOG_MSG];
+                snprintf(msg, sizeof(msg), "Receipt '%d' is deleted.\n", receipt_id);
+                custom_log(LOG_INFO, msg);
             }
 
-            printf("Name (Press 'Enter' to keep current): ");
-            fgets(name, sizeof(name), stdin);
-            trim_newline(name);
-            
-            printf("Receipt (Press 'Enter' to keep current): ");
-            fgets(receipt, sizeof(receipt), stdin);
-            trim_newline(receipt);
-            
-            head = update_receipt(head, receipt_id, name, receipt);
-            char msg[LEN_LOG_MSG];
-            snprintf(msg, sizeof(msg), "Receipt '%d' is updated.\n", receipt_id);
-            custom_log(LOG_INFO, msg);
-        }
-        else if(choice == MENU_DELETE){
-            custom_log(LOG_INFO, "Delete receipt...\n");
-            uint16_t receipt_id = 0;
-
-            display_receipts(head);
-
-            printf("ID of the receipt (int): ");
-            if(fgets(input, sizeof(input), stdin) == NULL){
-                continue; // handle EOF or read error
-            }
-            if(!parse_receipt_id(input, &receipt_id)){
-                continue;
-            }
-
-            head = delete_receipt(head, receipt_id);
-            char msg[LEN_LOG_MSG];
-            snprintf(msg, sizeof(msg), "Receipt '%d' is deleted.\n", receipt_id);
-            custom_log(LOG_INFO, msg);
-        }
-        else{
-            printf("Invalid option.\n");
+            printf("\nPress any key to continue...");
+            getchar();
+            enable_raw_mode(&orig_termios);
         }
     }
-    printf("Saving and exiting... Goodbye!\n");
+
+    disable_raw_mode(&orig_termios);
+    printf("\nSaving and exiting... Goodbye!\n");
     // Return head receipt pointer to be properly freed.
     return head;
 }
