@@ -70,9 +70,9 @@ typedef struct Receipt {
 ```
 
 **Usage examples:**
-- `main.c:493` - `if(current->id == receipt_id)` in `update_receipt()`
-- `main.c:539` - `if(current->id == receipt_id)` in `delete_receipt()`
-- `main.c:570` - `if(current->id == receipt_id)` in `view_receipt()`
+- `main.c:631` - `if(current->id == receipt_id)` in `update_receipt()`
+- `main.c:687` - `if(current->id == receipt_id)` in `delete_receipt()`
+- `main.c:727` - `if(current->id == receipt_id)` in `view_receipt()`
 
 Integer comparison (`==`) is a single CPU instruction, much faster than `strcmp()` which iterates through character arrays.
 
@@ -82,7 +82,7 @@ Integer comparison (`==`) is a single CPU instruction, much faster than `strcmp(
 - **Avoids O(n) iteration** through all recipes to determine the next available ID
 - Each new recipe gets an ID in constant time O(1), regardless of the total number of recipes
 
-**Implementation** (`main.c:322-335`):
+**Implementation** (`main.c:386-399`):
 ```c
 uint16_t get_new_id(Receipt *head){
     static uint16_t next_id = 0;  // Persists across function calls
@@ -100,7 +100,7 @@ uint16_t get_new_id(Receipt *head){
 }
 ```
 
-**Usage** (`main.c:395`):
+**Usage** (`main.c:489`):
 ```c
 new_receipt->id = get_new_id(head);  // Constant time O(1)
 ```
@@ -112,14 +112,14 @@ The static variable scans the list **once** on initialization, then generates ID
 - IDs are regenerated when loading recipes from file, keeping the file format simple and reducing storage overhead
 - This design separates runtime optimization (IDs) from persistent data (recipe names and instructions)
 
-**Saving to file** (`main.c:351-352`):
+**Saving to file** (`main.c:424-425`):
 ```c
 // IDs are NOT written to file
 fprintf(fptr, "Name: %s\n", r->name);
 fprintf(fptr, "Receipt: %s\n", r->receipt);  // Only name and recipe content
 ```
 
-**Regeneration during load** (`main.c:300`):
+**Regeneration during load** (`main.c:355`):
 ```c
 // IDs are regenerated sequentially when loading from file
 tmp_node->id = num_rec;
@@ -148,16 +148,16 @@ typedef struct Receipt {
 
 **File I/O optimization**:
 ```c
-// Append mode for new recipes (main.c:344)
+// Append mode for new recipes (main.c:417)
 FILE *fptr = fopen(FILE_NAME, "a");
 
-// Full rewrite only for updates/deletes (main.c:358-375)
+// Full rewrite only for updates/deletes (main.c:440-457)
 uint8_t rewrite_receipts_to_file(Receipt *head){
     // Only called when necessary to minimize I/O overhead
 }
 ```
 
-**Alphabetical sorting** (`main.c:409-453`):
+**Alphabetical sorting** (`main.c:513-567`):
 ```c
 // Case-insensitive comparison for sorting
 int8_t case_insensitive_compare(const char *s1, const char *s2){

@@ -73,7 +73,14 @@ Receipt *delete_receipt(Receipt *head, uint16_t receipt_id);
 uint8_t save_receipt_to_file(Receipt *r);
 uint8_t rewrite_receipts_to_file(Receipt *head);
 
-// main code
+/**
+ * @brief Main entry point of the Cookbook application
+ *
+ * Initializes the application by loading receipts from file, running the
+ * interactive menu loop, and cleaning up resources before exit.
+ *
+ * @return int Exit status (0 for success)
+ */
 int main(){
     // Setup
     Receipt *head = load_receipts();
@@ -88,8 +95,15 @@ int main(){
 }
 
 
-// Functions
-// Worker
+/**
+ * @brief Runs the interactive menu loop for the cookbook application
+ *
+ * Displays a menu with options to display, add, view, update, or delete receipts.
+ * Continues looping until the user chooses to exit (Q/q).
+ *
+ * @param head Pointer to the head of the receipt linked list
+ * @return Receipt* Updated head pointer of the receipt list
+ */
 Receipt *run_menu(Receipt *head){
     char input[LEN_INPUT_BUFFER];
     uint8_t choice = 0;
@@ -205,6 +219,12 @@ Receipt *run_menu(Receipt *head){
     return head;
 }
 
+/**
+ * @brief Converts a LogLevel enum value to its string representation
+ *
+ * @param level The log level to convert (LogLevel enum)
+ * @return const char* String representation of the log level
+ */
 const char* log_level_to_string(LogLevel level){
     switch(level){
         case LOG_DEBUG: return "DEBUG";
@@ -215,6 +235,15 @@ const char* log_level_to_string(LogLevel level){
     }
 }
 
+/**
+ * @brief Logs a message with timestamp and log level
+ *
+ * Filters messages based on MIN_LOG_LEVEL. Formats output with current
+ * timestamp in YYYY-MM-DD HH:MM:SS format followed by log level and message.
+ *
+ * @param level The severity level of the log message (LogLevel enum)
+ * @param message The message string to log (const char*)
+ */
 void custom_log(LogLevel level, const char *message){
     // Filter logs based on minimum log level
     if(level < MIN_LOG_LEVEL){
@@ -242,10 +271,28 @@ void custom_log(LogLevel level, const char *message){
     printf("%s - [%s] %s", time_buffer, log_level_to_string(level), message);
 }
 
+/**
+ * @brief Removes trailing newline characters from a string
+ *
+ * Removes both '\r' and '\n' characters from the end of the string
+ * by replacing the first occurrence with a null terminator.
+ *
+ * @param str The string to trim (char*)
+ */
 void trim_newline(char *str){
     str[strcspn(str, "\r\n")] = 0;
 }
 
+/**
+ * @brief Parses a string input to extract a receipt ID
+ *
+ * Attempts to parse the input string as an unsigned 16-bit integer.
+ * Logs a warning if parsing fails.
+ *
+ * @param input The input string to parse (const char*)
+ * @param receipt_id Pointer to store the parsed ID (uint16_t*)
+ * @return uint8_t 1 on success, 0 on failure
+ */
 uint8_t parse_receipt_id(const char *input, uint16_t *receipt_id){
     uint16_t temp;
     if(sscanf(input, "%hu", &temp) == 1){
@@ -256,6 +303,14 @@ uint8_t parse_receipt_id(const char *input, uint16_t *receipt_id){
     return 0;  // Failure
 }
 
+/**
+ * @brief Loads all receipts from the storage file into memory
+ *
+ * Reads receipts from FILE_NAME, parses each name/receipt pair, and
+ * builds a sorted doubly-linked list. Logs the number of receipts loaded.
+ *
+ * @return Receipt* Pointer to the head of the loaded receipt list, or NULL if file doesn't exist
+ */
 Receipt *load_receipts(){
     // Open receipts file
     FILE *fptr = fopen(FILE_NAME, "r");
@@ -319,6 +374,15 @@ Receipt *load_receipts(){
     return head;
 }
 
+/**
+ * @brief Generates a unique ID for a new receipt
+ *
+ * Uses a static counter to track the next available ID. On first call with
+ * a non-empty list, initializes from the highest existing ID in the list.
+ *
+ * @param head Pointer to the head of the receipt list (Receipt*)
+ * @return uint16_t A unique ID for a new receipt
+ */
 uint16_t get_new_id(Receipt *head){
     static uint16_t next_id = 0;
 
@@ -334,6 +398,15 @@ uint16_t get_new_id(Receipt *head){
     return next_id++;
 }
 
+/**
+ * @brief Saves a single receipt to the file in append mode
+ *
+ * Appends the receipt's name and content to FILE_NAME. Creates the file
+ * if it doesn't exist. Logs an error if the operation fails.
+ *
+ * @param r Pointer to the receipt to save (Receipt*)
+ * @return uint8_t 1 on success, 0 on failure
+ */
 uint8_t save_receipt_to_file(Receipt *r){
     if(r == NULL){
         custom_log(LOG_ERROR, "Receipt is corrupted.\n");
@@ -355,6 +428,15 @@ uint8_t save_receipt_to_file(Receipt *r){
     return 1;   // Return 1: Success
 }
 
+/**
+ * @brief Rewrites the entire receipt file with current list contents
+ *
+ * Opens FILE_NAME in write mode (truncating existing content) and writes
+ * all receipts from the linked list. Used after delete or update operations.
+ *
+ * @param head Pointer to the head of the receipt list (Receipt*)
+ * @return uint8_t 1 on success, 0 on failure
+ */
 uint8_t rewrite_receipts_to_file(Receipt *head){
     FILE *fptr = fopen(FILE_NAME, "w");
 
@@ -374,6 +456,18 @@ uint8_t rewrite_receipts_to_file(Receipt *head){
     return 1;
 }
 
+/**
+ * @brief Creates a new receipt and adds it to the list
+ *
+ * Allocates memory for a new receipt, initializes it with the provided
+ * name and content, assigns a unique ID, inserts it alphabetically into
+ * the list, and saves it to file.
+ *
+ * @param head Pointer to the head of the receipt list (Receipt*)
+ * @param name The name of the recipe (const char*)
+ * @param receipt The recipe content/instructions (const char*)
+ * @return Receipt* Updated head pointer of the receipt list
+ */
 Receipt *create_receipt(Receipt *head, const char *name, const char *receipt){
     // Allocate memory
     Receipt *new_receipt = malloc(sizeof(Receipt));
@@ -406,6 +500,16 @@ Receipt *create_receipt(Receipt *head, const char *name, const char *receipt){
     return head;
 }
 
+/**
+ * @brief Performs case-insensitive string comparison
+ *
+ * Compares two strings character by character, ignoring case differences.
+ * Returns the difference between the first mismatched characters.
+ *
+ * @param s1 First string to compare (const char*)
+ * @param s2 Second string to compare (const char*)
+ * @return int8_t Negative if s1 < s2, 0 if equal, positive if s1 > s2
+ */
 int8_t case_insensitive_compare(const char *s1, const char *s2){
     while(*s1 && *s2){
         if(tolower((unsigned char) *s1) != tolower((unsigned char) *s2)){
@@ -417,6 +521,16 @@ int8_t case_insensitive_compare(const char *s1, const char *s2){
     return tolower((unsigned char) *s1) - tolower((unsigned char) *s2);
 }
 
+/**
+ * @brief Inserts a receipt into the list in alphabetical order by name
+ *
+ * Maintains a doubly-linked list sorted alphabetically (case-insensitive).
+ * Handles insertion at head, middle, or tail positions.
+ *
+ * @param head Pointer to the head of the receipt list (Receipt*)
+ * @param new_receipt Pointer to the receipt to insert (Receipt*)
+ * @return Receipt* Updated head pointer of the receipt list
+ */
 Receipt *insert_alphabetically(Receipt *head, Receipt *new_receipt){
     // Case 1: Empty list
     if(head == NULL){
@@ -452,6 +566,17 @@ Receipt *insert_alphabetically(Receipt *head, Receipt *new_receipt){
     return head;
 }
 
+/**
+ * @brief Detaches a receipt node from the linked list
+ *
+ * Removes a node from the doubly-linked list by updating neighboring
+ * nodes' pointers. Does not free the node's memory. Handles edge cases
+ * for head, tail, and middle nodes.
+ *
+ * @param head Pointer to the head of the receipt list (Receipt*)
+ * @param node Pointer to the node to detach (Receipt*)
+ * @return Receipt* Updated head pointer of the receipt list
+ */
 Receipt *detach_receipt(Receipt *head, Receipt *node){
     if(head == NULL || node == NULL) return head;
 
@@ -477,6 +602,19 @@ Receipt *detach_receipt(Receipt *head, Receipt *node){
     return head;
 }
 
+/**
+ * @brief Updates an existing receipt's name and/or content
+ *
+ * Searches for a receipt by ID and updates its fields. If the name changes,
+ * the receipt is detached and re-inserted to maintain alphabetical order.
+ * Rewrites the file to persist changes.
+ *
+ * @param head Pointer to the head of the receipt list (Receipt*)
+ * @param receipt_id The ID of the receipt to update (uint16_t)
+ * @param name New name for the recipe, or NULL/empty to keep current (const char*)
+ * @param receipt New content, or NULL/empty to keep current (const char*)
+ * @return Receipt* Updated head pointer of the receipt list
+ */
 Receipt *update_receipt(Receipt *head, uint16_t receipt_id, const char *name, const char *receipt){
     if(name == NULL && receipt == NULL){
         custom_log(LOG_INFO, "No changes were made.\n");
@@ -527,6 +665,16 @@ Receipt *update_receipt(Receipt *head, uint16_t receipt_id, const char *name, co
     return head;
 }
 
+/**
+ * @brief Deletes a receipt from the list by ID
+ *
+ * Searches for a receipt with the given ID, detaches it from the list,
+ * frees its memory, and rewrites the file to persist the deletion.
+ *
+ * @param head Pointer to the head of the receipt list (Receipt*)
+ * @param receipt_id The ID of the receipt to delete (uint16_t)
+ * @return Receipt* Updated head pointer of the receipt list
+ */
 Receipt *delete_receipt(Receipt *head, uint16_t receipt_id){
     if(head == NULL){
         custom_log(LOG_WARN, "List is empty, nothing to delete.\n");
@@ -559,6 +707,15 @@ Receipt *delete_receipt(Receipt *head, uint16_t receipt_id){
     return head;
 }
 
+/**
+ * @brief Displays the full details of a specific receipt
+ *
+ * Searches for a receipt by ID and prints its name and content to stdout.
+ * Logs an error if the receipt is not found.
+ *
+ * @param head Pointer to the head of the receipt list (Receipt*)
+ * @param receipt_id The ID of the receipt to view (uint16_t)
+ */
 void view_receipt(Receipt *head, uint16_t receipt_id){
     if(head == NULL){
         custom_log(LOG_WARN, "Receipt list is empty, nothing to view.\n");
@@ -582,6 +739,14 @@ void view_receipt(Receipt *head, uint16_t receipt_id){
     printf("\t%s\n", current->receipt);
 }
 
+/**
+ * @brief Displays a summary list of all receipts
+ *
+ * Prints a formatted list showing the ID and name of each receipt.
+ * Displays a message if the list is empty.
+ *
+ * @param r Pointer to the head of the receipt list (Receipt*)
+ */
 void display_receipts(Receipt *r){
     if(r == NULL){
         custom_log(LOG_INFO, "The cookbook is empty!\n");
@@ -595,6 +760,14 @@ void display_receipts(Receipt *r){
     }
 }
 
+/**
+ * @brief Frees all memory allocated for the receipt linked list
+ *
+ * Traverses the entire linked list and frees each node's memory.
+ * Should be called before program exit to prevent memory leaks.
+ *
+ * @param head Pointer to the head of the receipt list (Receipt*)
+ */
 void free_list(Receipt *head){
     Receipt *tmp;
     while(head != NULL){
