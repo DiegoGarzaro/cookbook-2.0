@@ -16,8 +16,8 @@ Date: Dec 29, 2025
 #define LEN_NAME            30              // Name length
 #define LEN_REC             1000            // Receipt length
 #define FILE_NAME           "receipts.txt"  // Receipts file name
-#define PREFIX_NAME_LEN     6               // Length of "Name: "
-#define PREFIX_RECEIPT_LEN  9               // Length of "Receipt: "
+#define LEN_PREFIX_NAME     6               // Length of "Name: "
+#define LEN_PREFIX_RECEIPT  9               // Length of "Receipt: "
 #define LEN_DATETIME_FORMAT 26              // Length of "YYYY-MM-DD HH:MM:SS"
 #define LEN_INPUT_BUFFER    10              // Input buffer for menu choices
 #define LEN_LOG_MSG         50              // Small log message buffer
@@ -289,13 +289,13 @@ Receipt *load_receipts(){
             memset(tmp_node, 0, sizeof(Receipt));
 
             // Copy the name skipping "Name: " prefix
-            strncpy(tmp_node->name, buff+PREFIX_NAME_LEN, LEN_NAME-1);
+            strncpy(tmp_node->name, buff+LEN_PREFIX_NAME, LEN_NAME-1);
             tmp_node->name[LEN_NAME-1] = '\0';  // Ensure null-termination
         }
         // If currently filling a receipt
         else if(tmp_node != NULL && strstr(buff, "Receipt:")){
             // Copy the receipt skipping "Receipt: " prefix
-            strncpy(tmp_node->receipt, buff+PREFIX_RECEIPT_LEN, LEN_REC-1);
+            strncpy(tmp_node->receipt, buff+LEN_PREFIX_RECEIPT, LEN_REC-1);
             tmp_node->receipt[LEN_REC-1] = '\0';  // Ensure null-termination
             tmp_node->id = num_rec;
             head = insert_alphabetically(head, tmp_node);
