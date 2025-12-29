@@ -23,6 +23,14 @@ typedef enum {
     LOG_ERROR = 3
 } LogLevel;
 
+typedef enum {
+    MENU_DISPLAY_ALL = 1,
+    MENU_ADD = 2,
+    MENU_VIEW = 3,
+    MENU_UPDATE = 4,
+    MENU_DELETE = 5,
+} MenuChoice;
+
 // Set minimum log level to display (logs below this level will be filtered out)
 #define MIN_LOG_LEVEL LOG_INFO
 
@@ -77,9 +85,9 @@ int main(){
 // Worker
 Receipt *run_menu(Receipt *head){
     char input[LEN_INPUT_BUFFER];
-    char choice = 0;
+    uint8_t choice = 0;
 
-    while(choice != 'q' && choice != 'Q'){
+    while(1){
         printf("\n--- MENU ---\n");
         printf("1. Display all\n");
         printf("2. Add receipt\n");
@@ -90,14 +98,18 @@ Receipt *run_menu(Receipt *head){
         printf("Choice: ");
 
         if(!fgets(input, sizeof(input), stdin)) break;
-        choice = input[0];
+        trim_newline(input);
         printf("\n");
 
-        if(choice == '1'){
+        if(input[0] == 'q' || input[0] == 'Q') break;
+        
+        choice = atoi(input);
+
+        if(choice == MENU_DISPLAY_ALL){
             custom_log(LOG_INFO, "Displaying all receipts...\n");
             display_receipts(head);
         }
-        else if(choice == '2'){
+        else if(choice == MENU_ADD){
             custom_log(LOG_INFO, "Adding a new receipt...\n\n");
             char name[LEN_NAME], receipt[LEN_REC];
 
@@ -114,7 +126,7 @@ Receipt *run_menu(Receipt *head){
                 custom_log(LOG_INFO, "New receipt saved!\n");
             }
         }
-        else if(choice == '3'){
+        else if(choice == MENU_VIEW){
             // View receipt
             uint16_t receipt_id = 0;
 
@@ -130,7 +142,7 @@ Receipt *run_menu(Receipt *head){
 
             view_receipt(head, receipt_id);
         }
-        else if(choice == '4'){
+        else if(choice == MENU_UPDATE){
             custom_log(LOG_INFO, "Update receipt...\n");
             char name[LEN_NAME], receipt[LEN_REC];
             uint16_t receipt_id = 0;
@@ -158,7 +170,7 @@ Receipt *run_menu(Receipt *head){
             snprintf(msg, sizeof(msg), "Receipt '%d' is updated.\n", receipt_id);
             custom_log(LOG_INFO, msg);
         }
-        else if(choice == '5'){
+        else if(choice == MENU_DELETE){
             custom_log(LOG_INFO, "Delete receipt...\n");
             uint16_t receipt_id = 0;
 
@@ -176,9 +188,6 @@ Receipt *run_menu(Receipt *head){
             char msg[LEN_LOG_MSG];
             snprintf(msg, sizeof(msg), "Receipt '%d' is deleted.\n", receipt_id);
             custom_log(LOG_INFO, msg);
-        }
-        else if(choice == 'q' || choice == 'Q'){
-            break;
         }
         else{
             printf("Invalid option.\n");
